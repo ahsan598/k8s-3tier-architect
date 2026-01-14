@@ -114,7 +114,7 @@ kubectl get pv -n dev
 
 **1. Database Verification**
 ```sh
-kubectl exec -it mysql-0 -n dev -- mysql -uappuser -p
+kubectl exec -it mysql-0 -n dev -- mysql -u appuser -p
 
 # Check Database
 SHOW DATABASES;
@@ -127,12 +127,8 @@ SHOW DATABASES;
 ```sh
 kubectl exec -it <backend-pod> -n dev -- sh
 
-# Install Client
-apk update
-apk add --no-cache mysql-client
-
-# Connect to database
-mysql -h mysql-svc -uappuser -p mysqldb --ssl=0
+# Check DNS resolution
+nslookup mysql-svc
 ```
 ![backend](./assets/images/backend-verify.png)
 

@@ -4,10 +4,12 @@ kind: Secret
 metadata:
   name: db-secret
   namespace: dev
+  labels:
+    app: mysql-db
 type: Opaque
 data:
-  MYSQL_ROOT_PASSWORD: cm9vdHBhc3M=         # echo cm9vdHBhc3M= | base64 -d
-  MYSQL_PASSWORD: cGFzc3dvcmQxMjM=          # echo cGFzc3dvcmQxMjM= | base64 -d
+  MYSQL_ROOT_PASSWORD: cm9vdHBhc3M=         # rootpass
+  MYSQL_PASSWORD: cGFzc3dvcmQxMjM=          # password123
 
 ---
 # Database ConfigMap
@@ -16,6 +18,8 @@ kind: ConfigMap
 metadata:
   name: db-config
   namespace: dev
+  labels:
+    app: mysql-db
 data:
   MYSQL_DATABASE: mysqldb
   MYSQL_USER: appuser
@@ -27,9 +31,17 @@ kind: StatefulSet
 metadata:
   name: mysql
   namespace: dev
+  labels:
+    app: mysql-db
+
 spec:
   serviceName: mysql-svc
   replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+
   selector:
     matchLabels:
       app: mysql-db
@@ -38,34 +50,58 @@ spec:
       labels:
         app: mysql-db
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
       - name: mysql
-        image: mysql:8.0
+        image: mysql:8.4
         ports:
-        - containerPort: 3306
+        - name: mysql-port
+          containerPort: 3306
+
         envFrom:
         - configMapRef:
             name: db-config
         - secretRef:
             name: db-secret
+
         volumeMounts:
         - name: mysql-data
           mountPath: /var/lib/mysql
+
         resources:
           requests:
-            memory: "256Mi"
+            memory: "512Mi"
             cpu: "250m"
           limits:
-            memory: "512Mi"
+            memory: "1Gi"
             cpu: "500m"
+
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD}
+          initialDelaySeconds: 30
+          periodSeconds: 20
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD}
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
   volumeClaimTemplates:
   - metadata:
       name: mysql-data
     spec:
       accessModes: ["ReadWriteOnce"]
+      storageClassName: standard
       resources:
         requests:
-          storage: 2Gi
+          storage: 5Gi
 
 ---
 # Database Service
@@ -74,12 +110,14 @@ kind: Service
 metadata:
   name: mysql-svc
   namespace: dev
+  labels:
+    app: mysql-db
 spec:
   clusterIP: None
   selector:
     app: mysql-db
   ports:
-  - port: 3306
+  - name: mysql
+    port: 3306
     targetPort: 3306
     protocol: TCP
-    name: mysql

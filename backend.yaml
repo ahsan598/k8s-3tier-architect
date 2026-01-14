@@ -2,10 +2,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nodeapp-deploy
+  name: backend-deploy
   namespace: dev
+  labels:
+    app: node-app
+
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
   selector:
     matchLabels:
       app: node-app
@@ -15,16 +24,20 @@ spec:
         app: node-app
     spec:
       containers:
-      - name: nodeapp
-        image: node:20-alpine
+      - name: node
+        image: node:24-alpine
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8080
+        - name: backend-port
+          containerPort: 8080
         command: ["sleep", "10000"]
+
         env:
         - name: DB_HOST
           value: mysql-svc
         - name: DB_PORT
           value: "3306"
+
         - name: DB_NAME
           valueFrom:
             configMapKeyRef:
@@ -40,13 +53,25 @@ spec:
             secretKeyRef:
               name: db-secret
               key: MYSQL_PASSWORD
+
         resources:
           requests:
-            memory: "64Mi"
-            cpu: "50m"
+            memory: "256Mi"
+            cpu: "250m"
           limits:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "512Mi"
+            cpu: "500m"
+
+        livenessProbe:
+          exec:
+            command: ["true"]
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command: ["true"]
+          initialDelaySeconds: 10
+          periodSeconds: 15
 
 ---
 # Backend Service
@@ -55,10 +80,13 @@ kind: Service
 metadata:
   name: backend-svc
   namespace: dev
+  labels:
+    app: node-app
 spec:
   selector:
     app: node-app
   ports:
-  - port: 80
-    targetPort: 8080
+  - name: http
+    port: 80
+    targetPort: backend-port
     protocol: TCP
